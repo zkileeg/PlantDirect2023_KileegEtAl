@@ -1,0 +1,149 @@
+---
+title: "20200928_family_expansion"
+author: "Hasna Khan and Arooj Qamar, edited by Zach" 
+output: html_document
+---
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(stringr)
+lrr_data <- read_excel("~/phylogenetics/20200928_family_expansion/Species_LRRRLK_Counts_edited.xlsx")
+#row 54 and 60 are evm
+#one is Asparagus officinalis and the other is Amborella trichopoda
+#there are also 2 called Misin. same species but different number of LRRs in each subfamily? they're in rows 105 and 120. getting rid of these for now too...
+lrr_data <- lrr_data %>% na.omit(3)
+#rownames(lrr_data) <- lrr_data$Species, commented out until i remember why it's here...
+```
+
+```{r}
+#get rid of species and name columns for simplicity
+lrr_data[, c(1,2)] <- NULL
+
+#gather to long form
+lrr_data <- lrr_data %>% pivot_longer(cols = starts_with("Family"))
+colnames(lrr_data) <- c("Species_code", "Family", "Count")
+
+#wrap text in family names
+lrr_data$Family <- str_wrap(lrr_data$Family, width = 6)
+
+#get rid of the word family in the family col 
+lrr_data$Family <- substring(lrr_data$Family, first = 8)
+
+#boxplot :)
+```
+
+
+```{r}
+#outlier function i stole from stackoverflow (https://stackoverflow.com/questions/33524669/labeling-outliers-of-boxplots-in-r)
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 3 * IQR(x) | x > quantile(x, 0.75) + 3 * IQR(x))
+}
+
+lrr_data_families <- lrr_data %>% 
+  group_by(Family) %>% 
+  mutate(outlier = ifelse(is_outlier(Count), Species_code, NA))
+
+#create variable to alternate label positions
+lrr_data$hj <- rep(c(1,-.3), length.out=2875)
+#can we figure out how to do this for outliers only?
+
+family_plot <- ggplot(lrr_data_families, aes(x=Family, y=Count))+
+  geom_boxplot(col = "blue")+
+  #geom_dotplot(binaxis='y', stackdir='center', dotsize = 2, position = position_dodge(0.75), 
+               #fill = "white", method = "histodot", binwidth = 0.2)+
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0))+
+  geom_text(aes(label = outlier), na.rm = TRUE, hjust = lrr_data$hj, size = 2, position = position_dodge(1.5))
+
+family_plot
+```
+
+create boxplots for individual species to look at which families are most expanded
+```{r}
+#outlier function i stole from stackoverflow (https://stackoverflow.com/questions/33524669/labeling-outliers-of-boxplots-in-r)
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 1.5 * IQR(x) | x > quantile(x, 0.75) + 1.5 * IQR(x))
+}
+
+lrr_data_species <- lrr_data %>% 
+  group_by(Species_code) %>% 
+  mutate(outlier = ifelse(is_outlier(Count), Family, NA))
+
+class(lrr_data_species$Count)
+
+species_plot <- ggplot(lrr_data_species, aes(x=Species_code, y=Count))+
+  geom_boxplot(col = "blue")+
+  #geom_dotplot(binaxis='y', stackdir='center', dotsize = 2, position = position_dodge(0.75), 
+               #fill = "white", method = "histodot", binwidth = 0.2)+
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0))+
+  geom_text(aes(label = outlier), na.rm = TRUE, hjust = lrr_data$hj, size = 2)
+
+species_plot
+```
+
+split up species plot into a few different groups so it's easier to read
+we have 2875 rows right now 
+2875/25 subfamilies = 115 species
+lets split into 40 + 40 + 35
+rows 1-1000, 1001-2000, 2001-2925
+```{r}
+species1 <- lrr_data_species[1:1000, ]
+species2 <- lrr_data_species[1001:2000, ]
+species3 <- lrr_data_species[2001:2875, ]
+```
+
+
+ignore this
+```{r}
+bulbasaur <- ichooseyou("Bulbasaur")
+bulbasaur <- colorRampPalette(bulbasaur)(40)
+
+charmander <- ichooseyou("Charmander")
+charmander <- colorRampPalette(charmander)(40)
+
+squirtle <- ichooseyou("Squirtle")
+squirtle <- colorRampPalette(squirtle)(40)
+```
+
+
+```{r}
+species1$hj <- rep(c(1.2,-.5), length.out=1000)
+
+species1_plot <- ggplot(species1, aes(x=Species_code, y=Count, fill = Species_code))+
+  geom_boxplot(colour = "black")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0))+
+  geom_text(aes(label = outlier), na.rm = TRUE, hjust = species1$hj, size = 2)+
+  scale_fill_manual(values = bulbasaur)+
+  theme(legend.position = "none", axis.title.x = element_blank(), axis.title.y = element_blank())
+  
+species1_plot
+```
+
+```{r}
+species2$hj <- rep(c(1.2,-.5), length.out=1000)
+
+species2_plot <- ggplot(species2, aes(x=Species_code, y=Count, fill = Species_code))+
+  geom_boxplot(colour = "black")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0))+
+  geom_text(aes(label = outlier), na.rm = TRUE, hjust = species1$hj, size = 2)+
+  scale_fill_manual(values = charmander)+
+  theme(legend.position = "none", axis.title.x = element_blank(), axis.title.y = element_blank())
+  
+species2_plot
+```
+
+```{r}
+species3$hj <- rep(c(1.2,-.5), length.out=875)
+
+species3_plot <- ggplot(species3, aes(x=Species_code, y=Count, fill = Species_code))+
+  geom_boxplot(colour = "black")+
+  theme_minimal()+
+  theme(axis.text.x = element_text(angle = -90, hjust = 0, vjust = 0))+
+  geom_text(aes(label = outlier), na.rm = TRUE, hjust = species3$hj, size = 2)+
+  scale_fill_manual(values = squirtle)+
+  theme(legend.position = "none", axis.title.x = element_blank(), axis.title.y = element_blank())
+  
+species3_plot
+```

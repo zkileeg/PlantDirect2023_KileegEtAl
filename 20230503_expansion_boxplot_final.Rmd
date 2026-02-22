@@ -1,0 +1,85 @@
+---
+title: "Untitled"
+output: html_document
+date: '2023-05-03'
+---
+
+```{r}
+library(tidyverse)
+library(multcompView)
+```
+
+read in data, removing algae and related species (having few LRRs makes the %ages weird)
+```{r}
+algae_and_friends <- c("Pumbi", "Csube", "Bbrau", "Oluci", "MspRC", "Mpusi", "Czofi", "Vcart", "Crein", "Dsali")
+
+data2 <- read_csv("Apr6_LRR_Counts_Percent_Of_Total.csv")
+
+#pivot longer for anova and ggplot
+data2[, c(2:3)] <- NULL #get rid of identifying columns, zach you'll prolly wanna put these back
+data2 <- data2 %>% filter(code %in% algae_and_friends == FALSE) %>% 
+  pivot_longer(data2, cols = c(2:26), names_to = "Family", values_to = "Count")
+codes2 <- data2[1]
+data2[,1] <- NULL
+```
+
+stats
+```{r}
+model2 = lm(data2$Count ~ data2$Family)
+anova2 <- aov(model2)
+tukey2 <- TukeyHSD(x = anova2, "data2$Family", conf.level = 0.95)
+```
+
+assign letters to tukey signif groups for plot
+```{r}
+generate_label_df <- function(Tukey, variable) {
+  Tukey.levels <- Tukey[[variable]][,4]
+  Tukey.labels <- data.frame(multcompLetters(Tukey.levels)["Letters"])
+  Tukey.labels$treatment = rownames(Tukey.labels)
+  Tukey.labels <- Tukey.labels[order(Tukey.labels$treatment),]
+  return (Tukey.labels)
+}
+```
+
+```{r}
+labels2 <- generate_label_df(tukey2, "data2$Family")
+names(labels2) <- c("Letters", "Family")
+yvalue2 <- aggregate(.~Family, data = data2, mean)
+final2 <- merge(labels2, yvalue2)
+```
+
+
+identify outliers for labelling points
+```{r}
+is_outlier <- function(x) {
+  return(x < quantile(x, 0.25) - 3 * IQR(x) | x > quantile(x, 0.75) + 3 * IQR(x))
+}
+data2 <- cbind(codes2, data2)
+
+data2 <- data2 %>% 
+  group_by(Family) %>% 
+  mutate(outlier = ifelse(is_outlier(Count), code, NA))
+```
+
+setup for plot
+```{r}
+#stagger labels to minimize overlap
+data2$hj <- rep(c(1.1,-.3, 1.1, 1.1), length.out=2550)
+data2$vj <- rep(c(-1.5, 0, 1.5), length.out = 2550)
+
+#factor family to get correct order
+data2$Family <- factor(data2$Family, levels = c("I.1", "II", "III", "IV", "V", "VI.1", "VI.2", "VII.1", "VII.2a", "VII.3", "VIII.1", "VIII.2", "IX", "Xa", "Xb.1", "Xb.1a", "Xb.2", "XI.1a.", "XI.1b", "XI.1c.", "XII", "XIII.a", "XIII.b", "XIV", "XV"))
+```
+
+plot
+```{r}
+png("blueboxplot.png", units = "in", width = 20, height = 10, res = 300)
+ggplot(data2, aes(x = Family, y = Count))+
+  geom_boxplot(fill = "lightblue")+
+  annotate("text", x = final2$Family, y = 35, label = final2$Letters)+
+  geom_text(aes(label = outlier), na.rm = TRUE, size = 2, hjust = data2$hj, position = position_dodge(1))+
+  labs(y = "Percent of total LRR-RLKs in genome")+
+  ylim(0, 37)+
+  theme_minimal()
+dev.off()
+```
