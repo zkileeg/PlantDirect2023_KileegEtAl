@@ -1,0 +1,121 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+```{r}
+
+#load rhhmer package to manipulate the hmmer out files
+require(rhmmer)
+
+#function for collecting summary data
+count_collector <- function(){
+  count_list <- setNames(data.frame(matrix(ncol = 9, nrow = 0)), c("LRR", "Kinase", "Malectin", "MLD", "LRRKinase", "MalectinKinase", "MLDKinase", "LRRMalectinKinase", "LRRMLDKinase"))
+  function(temp_counts){
+    count_list <<- rbind(count_list, temp_counts)
+    count_list
+  }
+}
+
+#initiate the counts collector function so it's ready to be used inside th ehmmer function?
+counts <- count_collector()
+
+hmmer_analysis <- function(species) {  
+  
+    #Read the hmmer out file for each domain, this works on the cat file as well it seems
+    LRRdata <- read_tblout(sprintf("D:/genomes/%sLRR.out", species))
+    Kinasedata <- read_tblout(sprintf("D:/genomes/%sKinase.out", species))
+    Malectindata <- read_tblout(sprintf("D:/genomes/%sMalectin.out", species))
+    MLDdata <- read_tblout(sprintf("D:/genomes/%sMLD.out", species))
+
+    # REMOVED THIS PART: There is too much variability in the genome naming conventions between species, so instead just use the whole name, see below
+    #Now we need to remove the gene model numbers from the hits (ie. we want AT3G46660 instead of AT3G46660.1) NB This approach selects all data prior to the first instance of ".", but this may need to be corrected for each species!
+    #LRRdata_edit <- sub("\\..*", "", LRRdata$domain_name)
+    #Kinasedata_edit <- sub("\\..*", "", Kinasedata$domain_name)
+    #Malectindata_edit <- sub("\\..*", "", Malectindata$domain_name)
+    #MLDdata_edit <- sub("\\..*", "", MLDdata$domain_name)
+
+    #Now we need just the gene names
+    LRRdata_edit <- LRRdata$domain_name
+    Kinasedata_edit <- Kinasedata$domain_name
+    Malectindata_edit <- Malectindata$domain_name
+    MLDdata_edit <- MLDdata$domain_name
+    
+    #now we only want the elements that are found in both lists, this step will also remove duplicates
+    LRRKinase <- intersect(LRRdata_edit, Kinasedata_edit)
+    MalectinKinase <- intersect(Malectindata_edit, Kinasedata_edit)
+    MLDKinase <- intersect(MLDdata_edit, Kinasedata_edit)
+    LRRMalectinKinase <- intersect(LRRdata_edit, MalectinKinase)
+    LRRMLDKinase <- intersect(LRRdata_edit, MLDKinase)
+    
+    #Turn that all into a data frame for export
+    data_all <- list(LRRKinase, MalectinKinase, MLDKinase, LRRMalectinKinase, LRRMLDKinase)
+    #Need to pad those vectors with NAs so they are all the same length
+    data_all <- sapply(data_all, "length<-", max(lengths(data_all)))
+    #I am sure there is a cleaner way, but since we lost the columns names let's add them back...
+    colnames(data_all) <- c("LRRKinase", "MalectinKinase", "MLDKinase", "LRRMalectinKinase", "LRRMLDKinase")
+    #and now export the data
+    write.csv(data_all, file = sprintf("D:/genomes/%sCounts.csv", species))
+    
+    #Next add the count data to the summary table, first build a similar data frame as above with the same column names and the row named per species
+    temp_counts <- data.frame(length(LRRdata_edit), length(Kinasedata_edit), length(Malectindata_edit), length(MLDdata_edit), length(LRRKinase), length(MalectinKinase), length(MLDKinase), length(LRRMalectinKinase), length(LRRMLDKinase))
+    names(temp_counts) <- c("LRR", "Kinase", "Malectin", "MLD", "LRRKinase", "MalectinKinase", "MLDKinase", "LRRMalectinKinase", "LRRMLDKinase")
+    row.names(temp_counts) <- species
+   
+    #and then bind it to the existing data.frame
+    gene_summary <<- counts(temp_counts)
+    
+}
+
+#get all the species names from the fasta files
+species <- sub("\\..*", "", dir("D:/genomes/", pattern = ".fasta"))
+
+#run the procedure for all genomes in the folder
+lapply(species, hmmer_analysis)
+
+#and now export the gene count data
+write.csv(gene_summary, file = "D:/genomes/GeneCounts.csv")
+    
+```
+
+```{r}
+
+#Count the total number of longest proteins in each species, so that we cna do percentage calculations to normalize by genome size
+
+require(seqinr)
+
+#function for collecting summary data
+count_collector <- function(){
+  count_list <- setNames(data.frame(matrix(ncol = 1, nrow = 0)), c("Proteins"))
+  function(temp_counts){
+    count_list <<- rbind(count_list, temp_counts)
+    count_list
+  }
+}
+
+#initiate the counts collector function so it's ready to be used inside the gene count function
+counts <- count_collector()
+
+protein_count <- function(species) {
+    #load in the fasta file
+    genome <- read.fasta(file = sprintf("D:/genomes/%s.fasta", species))
+  
+    temp_counts <- data.frame(length(genome))
+    names(temp_counts) <- c("Proteins")
+    row.names(temp_counts) <- species
+   
+    #and then bind it to the existing data.frame
+    gene_summary <<- counts(temp_counts)
+    
+}
+
+#get all the species names from the fasta files
+species <- sub("\\..*", "", dir("D:/genomes/", pattern = ".fasta"))
+
+#run the procedure for all genomes in the folder
+lapply(species, protein_count)
+
+#and now export the total gene count data
+write.csv(gene_summary, file = "D:/genomes/TotalProteinCounts.csv")
+
+```
+
